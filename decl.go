@@ -90,7 +90,9 @@ func (pkg *Package) commentLines(comments []*ast.CommentGroup) Comments {
 	ss := make([]string, 0, 1)
 	for _, v := range comments {
 		if v != nil {
-			ss = append(ss, strings.TrimSuffix(v.Text(), "\n"))
+			for i := range v.List {
+				ss = append(ss, strings.TrimSuffix(v.List[i].Text, "\n"))
+			}
 		}
 	}
 	return ss
