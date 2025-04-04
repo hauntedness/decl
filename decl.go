@@ -121,6 +121,65 @@ type DefinedInfo struct {
 	Named *types.Named
 }
 
+// DefinedTypes return iterator over each defined type and its comments.
+func (pkg *Package) DefinedTypes() iter.Seq2[DefinedInfo, Comments] {
+	return func(yield func(DefinedInfo, Comments) bool) {
+		for ident, def := range pkg.TypesInfo.Defs {
+			if ident == nil || def == nil {
+				continue
+			}
+			if tn, ok := def.(*types.TypeName); ok {
+				if nm, ok := tn.Type().(*types.Named); ok {
+					info := DefinedInfo{
+						Definition: def,
+						TypeName:   tn,
+						Named:      nm,
+					}
+					if !yield(info, pkg.CommentsAt(ident.Pos())) {
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+type InterfaceInfo struct {
+	Definition types.Object
+	TypeName   *types.TypeName
+	// Defined Type also called Named Type in go.
+	// represent for a declaration such as:
+	// type S struct { ... }
+	Named      *types.Named
+	Underlying *types.Interface
+}
+
+// Interfaces return iterator over each struct and its comments.
+func (pkg *Package) Interfaces() iter.Seq2[InterfaceInfo, Comments] {
+	return func(yield func(InterfaceInfo, Comments) bool) {
+		for ident, def := range pkg.TypesInfo.Defs {
+			if ident == nil || def == nil {
+				continue
+			}
+			if tn, ok := def.(*types.TypeName); ok {
+				if nm, ok := tn.Type().(*types.Named); ok {
+					if st, ok := nm.Underlying().(*types.Interface); ok {
+						info := InterfaceInfo{
+							Definition: def,
+							TypeName:   tn,
+							Named:      nm,
+							Underlying: st,
+						}
+						if !yield(info, pkg.CommentsAt(ident.Pos())) {
+							return
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
 type StructInfo struct {
 	Definition types.Object
 	TypeName   *types.TypeName
@@ -151,6 +210,31 @@ func (pkg *Package) Structs() iter.Seq2[StructInfo, Comments] {
 							return
 						}
 					}
+				}
+			}
+		}
+	}
+}
+
+type FuncInfo struct {
+	Definition types.Object
+	Func       *types.Func
+}
+
+// Funcs return iterator over each struct and its comments.
+func (pkg *Package) Funcs() iter.Seq2[FuncInfo, Comments] {
+	return func(yield func(FuncInfo, Comments) bool) {
+		for ident, def := range pkg.TypesInfo.Defs {
+			if ident == nil || def == nil {
+				continue
+			}
+			if fn, ok := def.(*types.Func); ok {
+				info := FuncInfo{
+					Definition: def,
+					Func:       fn,
+				}
+				if !yield(info, pkg.CommentsAt(ident.Pos())) {
+					return
 				}
 			}
 		}

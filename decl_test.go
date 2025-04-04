@@ -30,3 +30,42 @@ func TestPackage_Structs(t *testing.T) {
 		}
 	}
 }
+
+func TestPackage_DefinedTypes(t *testing.T) {
+	pkg, err := Load("github.com/hauntedness/decl/internal/test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for info, comments := range pkg.DefinedTypes() {
+		fmt.Println("type:", info.Named.Obj().Name(), ";", "comments:", comments)
+	}
+}
+
+func TestPackage_Interfaces(t *testing.T) {
+	pkg, err := Load("github.com/hauntedness/decl/internal/test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for info, comments := range pkg.Interfaces() {
+		fmt.Println("type:", info.Named.Obj().Name(), ";", "comments:", comments)
+		for method := range info.Underlying.Methods() {
+			fmt.Println("method comments:", pkg.CommentsAt(method.Pos()))
+		}
+	}
+}
+
+func TestPackage_Funcs(t *testing.T) {
+	pkg, err := Load("github.com/hauntedness/decl/internal/test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for info, comments := range pkg.Funcs() {
+		fmt.Println("func:", info.Func.Name(), ";", "comments:", comments)
+		for method := range info.Func.Signature().Params().Variables() {
+			fmt.Println("func param comments:", pkg.CommentsAt(method.Pos()))
+		}
+	}
+}
