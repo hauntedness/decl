@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"go/types"
 	"iter"
+	"math"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -23,7 +24,7 @@ type Package struct {
 var DefaultLoadMode = packages.LoadFiles | packages.LoadSyntax | packages.LoadImports
 
 func Load(pkg string) (*Package, error) {
-	pkgs, err := packages.Load(&packages.Config{Mode: DefaultLoadMode}, pkg)
+	pkgs, err := packages.Load(&packages.Config{Mode: math.MaxInt}, pkg)
 	if err != nil {
 		return nil, err
 	}
