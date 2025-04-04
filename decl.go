@@ -83,7 +83,7 @@ func (pkg *Package) Comments(obj types.Object) Comments {
 
 // CommentsAt return comments at pos, remove line feed and nil comment group.
 func (pkg *Package) CommentsAt(pos token.Pos) Comments {
-	return pkg.commentLines(pkg.cmap[pkg.pmap[pos]])
+	return pkg.commentLines(pkg.CommentsRaw(pos))
 }
 
 func (pkg *Package) commentLines(comments []*ast.CommentGroup) Comments {
