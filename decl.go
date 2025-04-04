@@ -1,107 +1,189 @@
 package decl
 
 import (
+	"fmt"
 	"go/ast"
+	"go/token"
+	"go/types"
+	"iter"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 )
 
+// Package with doc associated.
 type Package struct {
-	structs    []*Struct
-	funcs      []*Func
-	interfaces []*Interface
-	vars       []*Var
-	implements []*ImplementStmt
+	*packages.Package
+	// position map is used to find the associated ident.
+	pmap map[token.Pos]*ast.Ident
+	// (TODO) try remove this as currently we don't modify ident position.
+	cmap ast.CommentMap
 }
 
-func Load(pkg *packages.Package) (*Package, error) {
-	c := &Package{}
-	commentMap := map[*ast.Ident]*Comment{}
-	fieldsCommentMap := map[*ast.Ident][]*Comment{}
+var DefaultLoadMode = packages.LoadFiles | packages.LoadSyntax | packages.LoadImports
+
+func Load(pkg string) (*Package, error) {
+	pkgs, err := packages.Load(&packages.Config{Mode: DefaultLoadMode}, pkg)
+	if err != nil {
+		return nil, err
+	}
+	if len(pkgs) != 1 {
+		return nil, fmt.Errorf("expect <%v> is 1 package but not", pkg)
+	}
+	return LoadPackage(pkgs[0])
+}
+
+// LoadPackage make sure pkg was loaded with correct LoadMode.
+func LoadPackage(pkg *packages.Package) (*Package, error) {
+	c := &Package{
+		Package: pkg,
+		cmap:    ast.CommentMap{},
+		pmap:    map[token.Pos]*ast.Ident{},
+	}
 	for _, syntax := range pkg.Syntax {
-		comments := ast.NewCommentMap(pkg.Fset, syntax, syntax.Comments)
-		for _, decl := range syntax.Decls {
-			switch declImpl := decl.(type) {
+		ast.Inspect(syntax, func(n ast.Node) bool {
+			switch nodeType := n.(type) {
 			case *ast.GenDecl:
-				for i := range declImpl.Specs {
-					switch spec := declImpl.Specs[i].(type) {
+				for _, spec := range nodeType.Specs {
+					switch specType := spec.(type) {
 					case *ast.TypeSpec:
-						commentMap[spec.Name] = NewComment(comments.Filter(decl))
-						// here we need more comments for fields
-						switch specType := spec.Type.(type) {
-						case *ast.StructType:
-							for _, f := range specType.Fields.List {
-								for range f.Names {
-									fieldsCommentMap[spec.Name] = append(fieldsCommentMap[spec.Name], NewComment(comments.Filter(f)))
-								}
-							}
-						case *ast.InterfaceType:
-							for _, f := range specType.Methods.List {
-								for range f.Names {
-									fieldsCommentMap[spec.Name] = append(fieldsCommentMap[spec.Name], NewComment(comments.Filter(f)))
-								}
-							}
-						}
+						c.cmap[specType.Name] = []*ast.CommentGroup{nodeType.Doc}
 					case *ast.ValueSpec:
-						if len(spec.Names) == 1 {
-							commentMap[spec.Names[0]] = NewComment(comments.Filter(decl))
+						for _, name := range specType.Names {
+							c.cmap[name] = []*ast.CommentGroup{nodeType.Doc}
 						}
 					}
 				}
-			case *ast.FuncDecl:
-				commentMap[declImpl.Name] = NewComment(comments.Filter(decl))
-			default:
-				// omit other case
+			case *ast.Field:
+				for _, ident := range nodeType.Names {
+					c.cmap[ident] = []*ast.CommentGroup{nodeType.Comment, nodeType.Doc}
+				}
 			}
-		}
+			return true
+		})
 	}
-	for id, def := range pkg.TypesInfo.Defs {
-		if id == nil {
+	for ident, def := range pkg.TypesInfo.Defs {
+		if ident == nil || def == nil {
 			continue
 		}
-		switch Kind(def) {
-		case KindStruct:
-			st, err := NewStruct(def)
-			if err != nil {
-				return nil, err
-			}
-			st.comment = commentMap[id]
-			fieldsComment := fieldsCommentMap[id]
-			if len(fieldsComment) == len(st.fields) {
-				for i := range st.fields {
-					st.fields[i].comment = fieldsComment[i]
-				}
-			}
-			c.structs = append(c.structs, st)
-		case KindInterface:
-			it, err := NewInterface(def)
-			if err != nil {
-				continue
-			}
-			it.comment = commentMap[id]
-			fieldsComment := fieldsCommentMap[id]
-			if len(fieldsComment) == it.iface.NumMethods() {
-				for i := range it.iface.NumMethods() {
-					it.methodComments[i] = fieldsComment[i]
-				}
-			}
-			c.interfaces = append(c.interfaces, it)
-		case KindFunc:
-			// TODO exclude interface method.
-			fn, err := NewFunc(def)
-			if err != nil {
-				return nil, err
-			}
-			fn.comment = (commentMap[id])
-			c.funcs = append(c.funcs, fn)
-		case KindVar:
-			var1, err := NewVar(def)
-			if err != nil {
-				return nil, err
-			}
-			var1.comment = commentMap[id]
-			c.vars = append(c.vars, var1)
-		}
+		c.pmap[ident.Pos()] = ident
 	}
 	return c, nil
+}
+
+// CommentsRaw return raw comment group, including nil.
+func (pkg *Package) CommentsRaw(pos token.Pos) []*ast.CommentGroup {
+	return pkg.cmap[pkg.pmap[pos]]
+}
+
+// Comments return comments in text slices, remove then '\n' in the end and nil values.
+func (pkg *Package) Comments(obj types.Object) Comments {
+	return pkg.commentLines(pkg.CommentsRaw(obj.Pos()))
+}
+
+// CommentsAt return comments at pos, remove line feed and nil comment group.
+func (pkg *Package) CommentsAt(pos token.Pos) Comments {
+	return pkg.commentLines(pkg.cmap[pkg.pmap[pos]])
+}
+
+func (pkg *Package) commentLines(comments []*ast.CommentGroup) Comments {
+	ss := make([]string, 0, 1)
+	for _, v := range comments {
+		if v != nil {
+			ss = append(ss, strings.TrimSuffix(v.Text(), "\n"))
+		}
+	}
+	return ss
+}
+
+// Definitions return iterator over each object and its comments.
+func (pkg *Package) Definitions() iter.Seq2[types.Object, Comments] {
+	return func(yield func(types.Object, Comments) bool) {
+		for ident, def := range pkg.TypesInfo.Defs {
+			if ident == nil || def == nil {
+				continue
+			}
+			if !yield(def, pkg.CommentsAt(ident.Pos())) {
+				return
+			}
+		}
+	}
+}
+
+type NamedInfo = DefinedInfo
+
+type DefinedInfo struct {
+	Definition types.Object
+	TypeName   *types.TypeName
+	// Defined Type also called Named Type in go.
+	// represent for a declaration such as:
+	// type S struct { ... }
+	Named *types.Named
+}
+
+type StructInfo struct {
+	Definition types.Object
+	TypeName   *types.TypeName
+	// Defined Type also called Named Type in go.
+	// represent for a declaration such as:
+	// type S struct { ... }
+	Named      *types.Named
+	Underlying *types.Struct
+}
+
+// Structs return iterator over each struct and its comments.
+func (pkg *Package) Structs() iter.Seq2[StructInfo, Comments] {
+	return func(yield func(StructInfo, Comments) bool) {
+		for ident, def := range pkg.TypesInfo.Defs {
+			if ident == nil || def == nil {
+				continue
+			}
+			if tn, ok := def.(*types.TypeName); ok {
+				if nm, ok := tn.Type().(*types.Named); ok {
+					if st, ok := nm.Underlying().(*types.Struct); ok {
+						info := StructInfo{
+							Definition: def,
+							TypeName:   tn,
+							Named:      nm,
+							Underlying: st,
+						}
+						if !yield(info, pkg.CommentsAt(ident.Pos())) {
+							return
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+type Comments []string
+
+func (c Comments) String() string {
+	return strings.Join(c, "\n")
+}
+
+func (c Comments) Filter(f func(line string) bool) Comments {
+	var nc Comments
+	for i := range c {
+		if f(c[i]) {
+			nc = append(nc, c[i])
+		}
+	}
+	return nc
+}
+
+// FilterPrefix can used to find deirectives like //go:linkname.
+func (c Comments) FilterPrefix(prefix string) Comments {
+	return c.Filter(func(s string) bool {
+		return strings.HasPrefix(s, prefix)
+	})
+}
+
+// At return comment at index, if index = -1, return the last one.
+func (c Comments) At(index int) string {
+	if index < 0 {
+		return c[len(c)+index]
+	}
+	return c[index]
 }
