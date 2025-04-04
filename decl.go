@@ -221,7 +221,7 @@ type FuncInfo struct {
 	Func       *types.Func
 }
 
-// Funcs return iterator over each struct and its comments.
+// Funcs return iterator over each funcs (including abstract ones) and its comments.
 func (pkg *Package) Funcs() iter.Seq2[FuncInfo, Comments] {
 	return func(yield func(FuncInfo, Comments) bool) {
 		for ident, def := range pkg.TypesInfo.Defs {
