@@ -259,6 +259,28 @@ func (c Comments) FilterPrefix(prefix string) Comments {
 	})
 }
 
+// LookupValue remove prefix from 1st matched comment and return the remaining.
+func (c Comments) LookupValue(prefix string, defaultValue string) string {
+	for i := range c {
+		remain, ok := strings.CutPrefix(c[i], prefix)
+		if ok {
+			return remain
+		}
+	}
+	return defaultValue
+}
+
+// Lookup execute fn on comment and return the 1st matched result.
+func (c Comments) Lookup(fn func(string) (string, bool), defaultValue string) string {
+	for i := range c {
+		remain, ok := fn(c[i])
+		if ok {
+			return remain
+		}
+	}
+	return defaultValue
+}
+
 // At return comment at index, if index = -1, return the last one.
 func (c Comments) At(index int) string {
 	if index < 0 {
