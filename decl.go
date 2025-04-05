@@ -281,8 +281,10 @@ func (c Comments) Collect(fn func(line string) (string, bool)) map[string]string
 	mp := map[string]string{}
 	for i := range c {
 		if remain, ok := fn(c[i]); ok {
-			key, value, _ := strings.Cut(remain, "=")
-			mp[key] = value
+			for field := range strings.FieldsSeq(remain) {
+				key, value, _ := strings.Cut(field, "=")
+				mp[key] = value
+			}
 		}
 	}
 	return mp
