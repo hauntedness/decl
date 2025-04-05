@@ -13,11 +13,10 @@ import (
 
 // Package with doc associated.
 type Package struct {
+	// package provider type information we need.
 	*packages.Package
 	// position map is used to find the associated ident.
-	pmap map[token.Pos]*ast.Ident
-	// (TODO) try remove this as currently we don't modify ident position.
-	cmap ast.CommentMap
+	cmap map[token.Pos][]*ast.CommentGroup
 }
 
 var DefaultLoadMode = packages.LoadFiles | packages.LoadSyntax | packages.LoadImports
@@ -37,8 +36,7 @@ func Load(pkg string) (*Package, error) {
 func LoadPackage(pkg *packages.Package) (*Package, error) {
 	c := &Package{
 		Package: pkg,
-		cmap:    ast.CommentMap{},
-		pmap:    map[token.Pos]*ast.Ident{},
+		cmap:    map[token.Pos][]*ast.CommentGroup{},
 	}
 	for _, syntax := range pkg.Syntax {
 		ast.Inspect(syntax, func(n ast.Node) bool {
@@ -47,33 +45,28 @@ func LoadPackage(pkg *packages.Package) (*Package, error) {
 				for _, spec := range nodeType.Specs {
 					switch specType := spec.(type) {
 					case *ast.TypeSpec:
-						c.cmap[specType.Name] = []*ast.CommentGroup{nodeType.Doc}
+						c.cmap[specType.Name.Pos()] = []*ast.CommentGroup{nodeType.Doc}
 					case *ast.ValueSpec:
 						for _, name := range specType.Names {
-							c.cmap[name] = []*ast.CommentGroup{nodeType.Doc}
+							c.cmap[name.Pos()] = []*ast.CommentGroup{nodeType.Doc}
 						}
 					}
 				}
 			case *ast.Field:
 				for _, ident := range nodeType.Names {
-					c.cmap[ident] = []*ast.CommentGroup{nodeType.Comment, nodeType.Doc}
+					c.cmap[ident.Pos()] = []*ast.CommentGroup{nodeType.Comment, nodeType.Doc}
 				}
 			}
 			return true
 		})
 	}
-	for ident, def := range pkg.TypesInfo.Defs {
-		if ident == nil || def == nil {
-			continue
-		}
-		c.pmap[ident.Pos()] = ident
-	}
+
 	return c, nil
 }
 
 // CommentsRaw return raw comment group, including nil.
 func (pkg *Package) CommentsRaw(pos token.Pos) []*ast.CommentGroup {
-	return pkg.cmap[pkg.pmap[pos]]
+	return pkg.cmap[pos]
 }
 
 // Comments return comments in text slices, remove then '\n' in the end and nil values.
