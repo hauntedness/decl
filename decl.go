@@ -259,19 +259,13 @@ func (c Comments) FilterPrefix(prefix string) Comments {
 	})
 }
 
-// LookupValue remove prefix from 1st matched comment and return the remaining.
+// LookupValue remove the prefix from 1st matched comment and return the remaining.
 func (c Comments) LookupValue(prefix string, defaultValue string) string {
-	for i := range c {
-		remain, ok := strings.CutPrefix(c[i], prefix)
-		if ok {
-			return remain
-		}
-	}
-	return defaultValue
+	return c.Lookup(CutPrefix(prefix), defaultValue)
 }
 
 // Lookup execute fn on comment and return the 1st matched result.
-func (c Comments) Lookup(fn func(string) (string, bool), defaultValue string) string {
+func (c Comments) Lookup(fn func(line string) (string, bool), defaultValue string) string {
 	for i := range c {
 		remain, ok := fn(c[i])
 		if ok {
@@ -281,10 +275,30 @@ func (c Comments) Lookup(fn func(string) (string, bool), defaultValue string) st
 	return defaultValue
 }
 
+// Collect firstly call fn to convert comment into literal 'key1=value1 key2=value2',
+// then collect the key and value pairs into map.
+func (c Comments) Collect(fn func(line string) (string, bool)) map[string]string {
+	mp := map[string]string{}
+	for i := range c {
+		remain, ok := fn(c[i])
+		if ok {
+			key, value, _ := strings.Cut(remain, "=")
+			mp[key] = value
+		}
+	}
+	return mp
+}
+
 // At return comment at index, if index = -1, return the last one.
 func (c Comments) At(index int) string {
 	if index < 0 {
 		return c[len(c)+index]
 	}
 	return c[index]
+}
+
+func CutPrefix(prefix string) func(string) (string, bool) {
+	return func(line string) (string, bool) {
+		return strings.CutPrefix(line, prefix)
+	}
 }
