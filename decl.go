@@ -252,42 +252,37 @@ func (c Comments) Filter(f func(line string) bool) Comments {
 	return nc
 }
 
-// FilterPrefix can used to find deirectives like //go:linkname.
-func (c Comments) FilterPrefix(prefix string) Comments {
-	return c.Filter(func(s string) bool {
-		return strings.HasPrefix(s, prefix)
-	})
-}
-
 // LookupValue remove the prefix from 1st matched comment and return the remaining.
-func (c Comments) LookupValue(prefix string, defaultValue string) string {
-	return c.Lookup(CutPrefix(prefix), defaultValue)
+func (c Comments) LookupValue(prefix string) (string, bool) {
+	return c.Lookup(CutPrefix(prefix))
 }
 
 // Lookup execute fn on comment and return the 1st matched result.
-func (c Comments) Lookup(fn func(line string) (string, bool), defaultValue string) string {
+func (c Comments) Lookup(fn func(line string) (string, bool)) (string, bool) {
 	for i := range c {
 		remain, ok := fn(c[i])
 		if ok {
-			return remain
+			return remain, true
 		}
 	}
-	return defaultValue
+	return "", false
 }
 
-// Collect firstly call fn to convert comment into literal 'key1=value1 key2=value2',
+// Collect call fn to convert comment into literal 'key1=value1 key2=value2',
 // then collect the key and value pairs into map.
-func (c Comments) Collect(fn func(line string) (string, bool)) map[string]string {
-	mp := map[string]string{}
+// Collect return true if any line converted by fn.
+func (c Comments) Collect(fn func(line string) (string, bool)) (map[string]string, bool) {
+	mp, found := map[string]string{}, false
 	for i := range c {
 		if remain, ok := fn(c[i]); ok {
 			for field := range strings.FieldsSeq(remain) {
 				key, value, _ := strings.Cut(field, "=")
 				mp[key] = value
 			}
+			found = true
 		}
 	}
-	return mp
+	return mp, found
 }
 
 // At return comment at index, if index = -1, return the last one.
@@ -296,6 +291,12 @@ func (c Comments) At(index int) string {
 		return c[len(c)+index]
 	}
 	return c[index]
+}
+
+func HasPrefix(prefix string) func(string) bool {
+	return func(line string) bool {
+		return strings.HasPrefix(line, prefix)
+	}
 }
 
 func CutPrefix(prefix string) func(string) (string, bool) {
