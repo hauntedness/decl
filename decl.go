@@ -105,31 +105,19 @@ func (pkg *Package) Definitions() iter.Seq2[types.Object, Comments] {
 	}
 }
 
-type NamedInfo = DefinedInfo
-
-type DefinedInfo struct {
-	Definition types.Object
-	TypeName   *types.TypeName
-	// Defined Type also called Named Type in go.
-	// represent for a declaration such as:
-	// type S struct { ... }
-	Named *types.Named
+func (pkg *Package) DefinedTypes() iter.Seq2[*types.Named, Comments] {
+	return pkg.NamedTypes()
 }
 
-// DefinedTypes return iterator over each defined type and its comments.
-func (pkg *Package) DefinedTypes() iter.Seq2[DefinedInfo, Comments] {
-	return func(yield func(DefinedInfo, Comments) bool) {
+// NamedTypes return iterator over each defined type and its comments.
+func (pkg *Package) NamedTypes() iter.Seq2[*types.Named, Comments] {
+	return func(yield func(*types.Named, Comments) bool) {
 		for ident, def := range pkg.TypesInfo.Defs {
 			if ident == nil || def == nil {
 				continue
 			}
 			if tn, ok := def.(*types.TypeName); ok {
-				if nm, ok := tn.Type().(*types.Named); ok {
-					info := DefinedInfo{
-						Definition: def,
-						TypeName:   tn,
-						Named:      nm,
-					}
+				if info, ok := tn.Type().(*types.Named); ok {
 					if !yield(info, pkg.CommentsAt(ident.Pos())) {
 						return
 					}
@@ -140,11 +128,6 @@ func (pkg *Package) DefinedTypes() iter.Seq2[DefinedInfo, Comments] {
 }
 
 type InterfaceInfo struct {
-	Definition types.Object
-	TypeName   *types.TypeName
-	// Defined Type also called Named Type in go.
-	// represent for a declaration such as:
-	// type S struct { ... }
 	Named      *types.Named
 	Underlying *types.Interface
 }
@@ -160,8 +143,6 @@ func (pkg *Package) Interfaces() iter.Seq2[InterfaceInfo, Comments] {
 				if nm, ok := tn.Type().(*types.Named); ok {
 					if st, ok := nm.Underlying().(*types.Interface); ok {
 						info := InterfaceInfo{
-							Definition: def,
-							TypeName:   tn,
 							Named:      nm,
 							Underlying: st,
 						}
@@ -176,11 +157,6 @@ func (pkg *Package) Interfaces() iter.Seq2[InterfaceInfo, Comments] {
 }
 
 type StructInfo struct {
-	Definition types.Object
-	TypeName   *types.TypeName
-	// Defined Type also called Named Type in go.
-	// represent for a declaration such as:
-	// type S struct { ... }
 	Named      *types.Named
 	Underlying *types.Struct
 }
@@ -196,8 +172,6 @@ func (pkg *Package) Structs() iter.Seq2[StructInfo, Comments] {
 				if nm, ok := tn.Type().(*types.Named); ok {
 					if st, ok := nm.Underlying().(*types.Struct); ok {
 						info := StructInfo{
-							Definition: def,
-							TypeName:   tn,
 							Named:      nm,
 							Underlying: st,
 						}

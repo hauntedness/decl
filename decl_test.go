@@ -38,7 +38,7 @@ func TestPackage_DefinedTypes(t *testing.T) {
 	}
 
 	for info, comments := range pkg.DefinedTypes() {
-		fmt.Println("type:", info.Named.Obj().Name(), ";", "comments:", comments)
+		fmt.Println("type:", info.Obj().Name(), ";", "comments:", comments)
 	}
 }
 
