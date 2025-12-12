@@ -32,8 +32,12 @@ func Load(pkg string) (*Package, error) {
 	return LoadPackage(pkgs[0])
 }
 
-func LoadMap(patterns ...string) (map[string]*Package, error) {
-	pkgs, err := packages.Load(&packages.Config{Mode: DefaultLoadMode}, patterns...)
+func LoadMap(cfg *packages.Config, patterns ...string) (map[string]*Package, error) {
+	if cfg == nil {
+		cfg = &packages.Config{Mode: DefaultLoadMode}
+	}
+
+	pkgs, err := packages.Load(cfg, patterns...)
 	if err != nil {
 		return nil, err
 	}
