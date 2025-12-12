@@ -32,6 +32,24 @@ func Load(pkg string) (*Package, error) {
 	return LoadPackage(pkgs[0])
 }
 
+func LoadMap(patterns ...string) (map[string]*Package, error) {
+	pkgs, err := packages.Load(&packages.Config{Mode: DefaultLoadMode}, patterns...)
+	if err != nil {
+		return nil, err
+	}
+
+	var mp = make(map[string]*Package)
+	for i := range pkgs {
+		p, err := LoadPackage(pkgs[i])
+		if err != nil {
+			return mp, err
+		}
+		mp[p.PkgPath] = p
+	}
+
+	return mp, nil
+}
+
 // LoadPackage make sure pkg was loaded with correct LoadMode.
 func LoadPackage(pkg *packages.Package) (*Package, error) {
 	c := &Package{
